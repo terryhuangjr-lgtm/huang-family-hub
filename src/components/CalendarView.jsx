@@ -152,6 +152,20 @@ export default function CalendarView({ onNavigate }) {
     return `${h}:${m} ${ampm} ET`
   }
 
+  function formatEndTime(timeStr, durationMin) {
+    if (!timeStr || !durationMin) return ''
+    const parts = timeStr.split(':')
+    let h = parseInt(parts[0], 10)
+    let m = parseInt(parts[1] || '0', 10)
+    const totalMin = h * 60 + m + durationMin
+    h = Math.floor(totalMin / 60) % 24
+    m = totalMin % 60
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    if (h === 0) h = 12
+    else if (h > 12) h -= 12
+    return `${h}:${String(m).padStart(2, '0')} ${ampm}`
+  }
+
   function getEventsForDay(day) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     return events.filter(e => e.event_date === dateStr)
@@ -241,7 +255,7 @@ export default function CalendarView({ onNavigate }) {
                   {ev.title}
                 </div>
                 <div className="event-item-meta">
-                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {formatTime(ev.event_time)}  </>}
+                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {formatTime(ev.event_time)}{ev.duration_minutes ? ` – ${formatEndTime(ev.event_time, ev.duration_minutes)}` : ''}  </>}
                   {ev.location && <><MapPin size={12} /> {ev.location}  </>}
                   {ev.recurring_pattern && <span className="badge badge-orange" style={{ marginLeft: 4 }}>{ev.recurring_pattern}</span>}
                   <span className={`event-item-member ${ev.family_member.toLowerCase()}`}>
@@ -279,6 +293,19 @@ export default function CalendarView({ onNavigate }) {
                   <label>Time</label>
                   <input type="time" value={formData.event_time} onChange={e => setFormData({ ...formData, event_time: e.target.value })} />
                 </div>
+              </div>
+              <div className="form-group">
+                <label>Duration</label>
+                <select value={formData.duration_minutes} onChange={e => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}>
+                  <option value="15">15 min</option>
+                  <option value="30">30 min</option>
+                  <option value="45">45 min</option>
+                  <option value="60">1 hour</option>
+                  <option value="90">1.5 hours</option>
+                  <option value="120">2 hours</option>
+                  <option value="180">3 hours</option>
+                  <option value="240">4 hours</option>
+                </select>
               </div>
               <div className="form-row">
                 <div className="form-group">
