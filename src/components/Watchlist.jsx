@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, X, Trash2 } from 'lucide-react'
+import { Plus, X, Trash2, Edit3 } from 'lucide-react'
+
+const CATEGORIES = ['Family Movie', 'Kids', 'Date Night', 'Must Watch', 'Terry', 'Donna']
 
 export default function Watchlist() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [filter, setFilter] = useState('all')
-  const [formData, setFormData] = useState({ title: '', media_type: 'movie', added_by: 'Family' })
+  const [editItem, setEditItem] = useState(null)
+  const [activeCategory, setActiveCategory] = useState('Family Movie')
+  const [error, setError] = useState('')
+  const [formData, setFormData] = useState({
+    title: '', category: 'Family Movie', notes: '', url: ''
+  })
 
   useEffect(() => {
     loadItems()
-    const channel = supabase.channel('watchlist-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'watchlist' }, loadItems)
-      .subscribe()
-    return () => supabase.removeChannel(channel)
   }, [])
 
   async function loadItems() {
@@ -22,7 +24,7 @@ export default function Watchlist() {
       const { data } = await supabase
         .from('watchlist')
         .select('*')
-        .order('sort_order', { ascending: true })
+        .eq('status', 'pending')
         .order('created_at', { ascending: false })
       setItems(data || [])
     } catch (err) {
@@ -32,28 +34,48 @@ export default function Watchlist() {
     }
   }
 
-  async function toggleWatched(item) {
-    try {
-      await supabase.from('watchlist').update({
-        watched: !item.watched,
-        watched_at: !item.watched ? new Date().toISOString() : null
-      }).eq('id', item.id)
-      loadItems()
-    } catch (err) {
-      console.error('Failed to toggle:', err)
-    }
+  function resetForm() {
+    setFormData({ title: '', category: activeCategory, notes: '', url: '' })
+    setError('')
+    setEditItem(null)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    setError('')
     if (!formData.title.trim()) return
     try {
-      await supabase.from('watchlist').insert({ ...formData, title: formData.title.trim() })
-      setFormData({ title: '', media_type: 'movie', added_by: 'Family' })
+      if (editItem) {
+        await supabase.from('watchlist').update({
+          title: formData.title.trim(),
+          category: formData.category,
+          notes: formData.notes || null,
+          url: formData.url || null
+        }).eq('id', editItem.id)
+      } else {
+        await supabase.from('watchlist').insert({
+          title: formData.title.trim(),
+          category: formData.category,
+          notes: formData.notes || null,
+          url: formData.url || null,
+          status: 'pending'
+        })
+      }
+      resetForm()
       setShowForm(false)
       loadItems()
     } catch (err) {
-      console.error('Failed to add:', err)
+      console.error('Failed to save:', err)
+      setError('Failed to save: ' + err.message)
+    }
+  }
+
+  async function markWatched(item) {
+    try {
+      await supabase.from('watchlist').update({ status: 'watched' }).eq('id', item.id)
+      loadItems()
+    } catch (err) {
+      console.error('Failed to mark watched:', err)
     }
   }
 
@@ -66,75 +88,79 @@ export default function Watchlist() {
     }
   }
 
-  const filteredItems = items.filter(i => {
-    if (filter === 'all') return true
-    if (filter === 'to-watch') return !i.watched
-    if (filter === 'watched') return i.watched
-    return true
+  function openEdit(item) {
+    setEditItem(item)
+    setFormData({
+      title: item.title,
+      category: item.category,
+      notes: item.notes || '',
+      url: item.url || ''
+    })
+    setShowForm(true)
+  }
+
+  function openAdd() {
+    resetForm()
+    setShowForm(true)
+  }
+
+  const categoryCounts = {}
+  items.forEach(i => {
+    categoryCounts[i.category] = (categoryCounts[i.category] || 0) + 1
   })
 
-  if (loading) return <div className="loading-state">Loading watchlist...</div>
+  const filteredItems = items.filter(i => i.category === activeCategory || activeCategory === 'all')
 
-  const mediaIcons = {
-    movie: 'Movie', tv_show: 'TV Show', documentary: 'Doc', anime: 'Anime'
-  }
+  if (loading) return <div className="loading-state">Loading watchlist...</div>
 
   return (
     <div>
       <div className="page-header">
         <h1>Watchlist</h1>
-        <p>Movies and shows to watch</p>
+        <p>Movies and shows we want to watch</p>
       </div>
 
-      <div className="filter-bar" style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {['all', 'to-watch', 'watched'].map(f => (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {CATEGORIES.map(cat => (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
             style={{
               padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)',
-              background: filter === f ? 'var(--orange-light)' : 'transparent',
-              color: filter === f ? 'var(--orange)' : 'var(--text-secondary)',
+              background: activeCategory === cat ? 'var(--orange-light)' : 'transparent',
+              color: activeCategory === cat ? 'var(--orange)' : 'var(--text-secondary)',
               fontSize: 12, fontWeight: 500, cursor: 'pointer',
-              borderColor: filter === f ? 'var(--orange)' : 'var(--border)'
+              borderColor: activeCategory === cat ? 'var(--orange)' : 'var(--border)'
             }}
           >
-            {f === 'all' ? 'All' : f === 'to-watch' ? 'To Watch' : 'Watched'}
+            {cat} {categoryCounts[cat] ? `(${categoryCounts[cat]})` : ''}
           </button>
         ))}
-        <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setShowForm(true)}>
-          <Plus size={14} /> Add
-        </button>
       </div>
+
+      <button type="button" className="btn btn-primary" onClick={openAdd} style={{ marginBottom: 16 }}>
+        <Plus size={14} /> Add Movie/Show
+      </button>
 
       <div className="card">
         {filteredItems.length === 0 ? (
-          <div className="empty-state">No items in this list</div>
+          <div className="empty-state">Nothing in this category</div>
         ) : (
           filteredItems.map(item => (
-            <div key={item.id} className="watchlist-item">
-              <div
-                className={`checkbox ${item.watched ? 'checked' : ''}`}
-                onClick={() => toggleWatched(item)}
-              >
-                {item.watched && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </div>
-              <div className="watchlist-info">
-                <div className={`watchlist-title ${item.watched ? 'watched' : ''}`}>
-                  {item.title}
-                </div>
-                <div className="watchlist-meta">
-                  <span className={`badge badge-${item.media_type === 'movie' ? 'blue' : item.media_type === 'tv_show' ? 'purple' : 'gray'}`}>
-                    {mediaIcons[item.media_type] || item.media_type}
-                  </span>
-                  {item.added_by && <> Added by {item.added_by}</>}
-                  {item.watched && item.watched_at && <> Watched {new Date(item.watched_at).toLocaleDateString()}</>}
+            <div key={item.id} className="list-item">
+              <div className="list-item-content">
+                <div className="list-item-title">{item.title}</div>
+                <div className="list-item-sub">
+                  {item.notes && <>{item.notes}</>}
+                  {item.url && <> • <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--orange)', textDecoration: 'none' }}>Link</a></>}
                 </div>
               </div>
+              <button onClick={() => markWatched(item)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: 4, fontSize: 11 }} title="Mark watched">
+                ✓ Watched
+              </button>
+              <button onClick={() => openEdit(item)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: 4 }} title="Edit">
+                <Edit3 size={14} />
+              </button>
               <button onClick={() => deleteItem(item.id)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <Trash2 size={14} />
               </button>
@@ -143,41 +169,55 @@ export default function Watchlist() {
         )}
       </div>
 
-      {/* Add Modal */}
+      {error && (
+        <div style={{ padding: '10px 14px', background: 'rgba(220,53,69,0.08)', color: 'var(--red)', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
       {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+        <div className="modal-overlay" onClick={() => { resetForm(); setShowForm(false) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Add to Watchlist</h2>
-              <button className="modal-close" onClick={() => setShowForm(false)}><X size={18} /></button>
+              <h2>{editItem ? 'Edit Movie/Show' : 'Add Movie/Show'}</h2>
+              <button className="modal-close" onClick={() => { resetForm(); setShowForm(false) }}><X size={18} /></button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Title</label>
-                <input value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} placeholder="Movie or show title" autoFocus />
+                <input
+                  value={formData.title}
+                  onChange={e => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="Movie or show name"
+                  autoFocus
+                />
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Type</label>
-                  <select value={formData.media_type} onChange={e => setFormData({ ...formData, media_type: e.target.value })}>
-                    <option value="movie">Movie</option>
-                    <option value="tv_show">TV Show</option>
-                    <option value="documentary">Documentary</option>
-                    <option value="anime">Anime</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Added By</label>
-                  <select value={formData.added_by} onChange={e => setFormData({ ...formData, added_by: e.target.value })}>
-                    <option value="Family">Family</option>
-                    <option value="Terry">Terry</option>
-                    <option value="Donna">Donna</option>
-                  </select>
-                </div>
+              <div className="form-group">
+                <label>Category</label>
+                <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Notes</label>
+                <input
+                  value={formData.notes}
+                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Why we want to watch this?"
+                />
+              </div>
+              <div className="form-group">
+                <label>Link (optional)</label>
+                <input
+                  value={formData.url}
+                  onChange={e => setFormData({ ...formData, url: e.target.value })}
+                  placeholder="IMDb, YouTube, trailer URL..."
+                />
               </div>
               <div className="form-actions">
-                <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Add</button>
+                <button type="button" className="btn" onClick={() => { resetForm(); setShowForm(false) }}>Cancel</button>
+                <button type="submit" className="btn btn-primary">{editItem ? 'Update' : 'Add'}</button>
               </div>
             </form>
           </div>

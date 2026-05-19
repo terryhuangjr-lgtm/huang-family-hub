@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, X, Trash2 } from 'lucide-react'
+import { Plus, X, Trash2, Edit3 } from 'lucide-react'
 
 export default function ShoppingList() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [newItem, setNewItem] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [editItem, setEditItem] = useState(null)
   const [filter, setFilter] = useState('pending')
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -53,6 +54,7 @@ export default function ShoppingList() {
     setFormData({ item: '', category: 'groceries', quantity: 1, notes: '', added_by: 'Family' })
     setNewItem('')
     setError('')
+    setEditItem(null)
   }
 
   async function handleSubmit(e) {
@@ -60,19 +62,29 @@ export default function ShoppingList() {
     setError('')
     if (!formData.item.trim()) return
     try {
-      await supabase.from('shopping_list').insert({
-        item: formData.item.trim(),
-        category: formData.category,
-        quantity: formData.quantity || 1,
-        notes: formData.notes || null,
-        added_by: formData.added_by
-      })
+      if (editItem) {
+        await supabase.from('shopping_list').update({
+          item: formData.item.trim(),
+          category: formData.category,
+          quantity: formData.quantity || 1,
+          notes: formData.notes || null,
+          added_by: formData.added_by
+        }).eq('id', editItem.id)
+      } else {
+        await supabase.from('shopping_list').insert({
+          item: formData.item.trim(),
+          category: formData.category,
+          quantity: formData.quantity || 1,
+          notes: formData.notes || null,
+          added_by: formData.added_by
+        })
+      }
       resetForm()
       setShowForm(false)
       loadItems()
     } catch (err) {
-      console.error('Failed to add:', err)
-      setError('Failed to add: ' + err.message)
+      console.error('Failed to save:', err)
+      setError('Failed to save: ' + err.message)
     }
   }
 
@@ -83,6 +95,23 @@ export default function ShoppingList() {
     } catch (err) {
       console.error('Failed to delete:', err)
     }
+  }
+
+  function openEdit(item) {
+    setEditItem(item)
+    setFormData({
+      item: item.item,
+      category: item.category,
+      quantity: item.quantity || 1,
+      notes: item.notes || '',
+      added_by: item.added_by || 'Family'
+    })
+    setShowForm(true)
+  }
+
+  function openAdd() {
+    resetForm()
+    setShowForm(true)
   }
 
   async function quickAdd(e) {
@@ -123,7 +152,7 @@ export default function ShoppingList() {
           placeholder="Quick add an item..."
         />
         <button type="button" className="btn btn-primary" onClick={quickAdd}><Plus size={16} /></button>
-        <button type="button" className="btn" onClick={() => { setError(''); resetForm(); setShowForm(true) }} style={{ whiteSpace: 'nowrap' }}>
+        <button type="button" className="btn" onClick={openAdd} style={{ whiteSpace: 'nowrap' }}>
           + Details
         </button>
       </div>
@@ -175,6 +204,9 @@ export default function ShoppingList() {
                   {item.added_by && <> Added by {item.added_by}</>}
                 </div>
               </div>
+              <button onClick={() => openEdit(item)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: 4 }} title="Edit">
+                <Edit3 size={14} />
+              </button>
               <button onClick={() => deleteItem(item.id)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <Trash2 size={14} />
               </button>
@@ -189,13 +221,13 @@ export default function ShoppingList() {
         </div>
       )}
 
-      {/* Add Item Modal */}
+      {/* Add / Edit Item Modal */}
       {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+        <div className="modal-overlay" onClick={() => { resetForm(); setShowForm(false) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Add Item</h2>
-              <button className="modal-close" onClick={() => setShowForm(false)}><X size={18} /></button>
+              <h2>{editItem ? 'Edit Item' : 'Add Item'}</h2>
+              <button className="modal-close" onClick={() => { resetForm(); setShowForm(false) }}><X size={18} /></button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -245,8 +277,8 @@ export default function ShoppingList() {
                 />
               </div>
               <div className="form-actions">
-                <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Add Item</button>
+                <button type="button" className="btn" onClick={() => { resetForm(); setShowForm(false) }}>Cancel</button>
+                <button type="submit" className="btn btn-primary">{editItem ? 'Update' : 'Add Item'}</button>
               </div>
             </form>
           </div>

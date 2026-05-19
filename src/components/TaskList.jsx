@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, X, Trash2 } from 'lucide-react'
+import { Plus, X, Trash2, Edit3 } from 'lucide-react'
 
 export default function TaskList() {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editTask, setEditTask] = useState(null)
   const [newTitle, setNewTitle] = useState('')
   const [filter, setFilter] = useState('all')
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     title: '', assigned_to: 'Family', priority: 'medium', due_date: '', notes: ''
   })
@@ -52,24 +54,38 @@ export default function TaskList() {
   function resetForm() {
     setFormData({ title: '', assigned_to: 'Family', priority: 'medium', due_date: '', notes: '' })
     setNewTitle('')
+    setError('')
+    setEditTask(null)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    setError('')
     if (!formData.title.trim()) return
     try {
-      await supabase.from('tasks').insert({
-        title: formData.title.trim(),
-        assigned_to: formData.assigned_to,
-        priority: formData.priority,
-        due_date: formData.due_date || null,
-        status: 'pending'
-      })
+      if (editTask) {
+        await supabase.from('tasks').update({
+          title: formData.title.trim(),
+          assigned_to: formData.assigned_to,
+          priority: formData.priority,
+          due_date: formData.due_date || null,
+          notes: formData.notes || null
+        }).eq('id', editTask.id)
+      } else {
+        await supabase.from('tasks').insert({
+          title: formData.title.trim(),
+          assigned_to: formData.assigned_to,
+          priority: formData.priority,
+          due_date: formData.due_date || null,
+          status: 'pending'
+        })
+      }
       resetForm()
       setShowForm(false)
       loadTasks()
     } catch (err) {
-      console.error('Failed to add:', err)
+      console.error('Failed to save:', err)
+      setError('Failed to save: ' + err.message)
     }
   }
 
@@ -82,7 +98,23 @@ export default function TaskList() {
     }
   }
 
-  // Allow quick-add via Enter key too
+  function openEdit(task) {
+    setEditTask(task)
+    setFormData({
+      title: task.title,
+      assigned_to: task.assigned_to || 'Family',
+      priority: task.priority || 'medium',
+      due_date: task.due_date || '',
+      notes: task.notes || ''
+    })
+    setShowForm(true)
+  }
+
+  function openAdd() {
+    resetForm()
+    setShowForm(true)
+  }
+
   async function quickAdd(e) {
     e.preventDefault()
     if (!newTitle.trim()) return
@@ -125,7 +157,7 @@ export default function TaskList() {
           placeholder="Quick add a task..."
         />
         <button type="button" className="btn btn-primary" onClick={quickAdd}><Plus size={16} /></button>
-        <button type="button" className="btn" onClick={() => { resetForm(); setShowForm(true) }} style={{ whiteSpace: 'nowrap' }}>
+        <button type="button" className="btn" onClick={openAdd} style={{ whiteSpace: 'nowrap' }}>
           + Details
         </button>
       </div>
@@ -178,6 +210,9 @@ export default function TaskList() {
                   ) : null}
                 </div>
               </div>
+              <button onClick={() => openEdit(task)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: 4 }} title="Edit">
+                <Edit3 size={14} />
+              </button>
               <button onClick={() => deleteTask(task.id)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <Trash2 size={14} />
               </button>
@@ -186,13 +221,19 @@ export default function TaskList() {
         )}
       </div>
 
-      {/* Add Task Modal */}
+      {error && (
+        <div style={{ padding: '10px 14px', background: 'rgba(220,53,69,0.08)', color: 'var(--red)', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Add / Edit Task Modal */}
       {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+        <div className="modal-overlay" onClick={() => { resetForm(); setShowForm(false) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>New Task</h2>
-              <button className="modal-close" onClick={() => setShowForm(false)}><X size={18} /></button>
+              <h2>{editTask ? 'Edit Task' : 'New Task'}</h2>
+              <button className="modal-close" onClick={() => { resetForm(); setShowForm(false) }}><X size={18} /></button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -240,8 +281,8 @@ export default function TaskList() {
                 />
               </div>
               <div className="form-actions">
-                <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Add Task</button>
+                <button type="button" className="btn" onClick={() => { resetForm(); setShowForm(false) }}>Cancel</button>
+                <button type="submit" className="btn btn-primary">{editTask ? 'Update' : 'Add Task'}</button>
               </div>
             </form>
           </div>
