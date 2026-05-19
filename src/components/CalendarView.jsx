@@ -14,6 +14,14 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
 
+const RECURRENCE_OPTIONS = [
+  { value: '', label: 'One-time' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Every 2 Weeks' },
+  { value: 'monthly', label: 'Monthly' },
+]
+
 export default function CalendarView({ onNavigate }) {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -21,10 +29,12 @@ export default function CalendarView({ onNavigate }) {
   const [selectedDate, setSelectedDate] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
+  const [recurrenceCount, setRecurrenceCount] = useState(12)
   const [formData, setFormData] = useState({
     title: '', description: '', event_date: new Date().toISOString().split('T')[0],
     event_time: '', event_type: 'general', family_member: 'Family',
-    location: '', all_day: false, duration_minutes: 60
+    location: '', all_day: false, duration_minutes: 60,
+    recurring_pattern: ''
   })
 
   const year = currentDate.getFullYear()
@@ -33,13 +43,17 @@ export default function CalendarView({ onNavigate }) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const prevMonthDays = new Date(year, month, 0).getDate()
 
-  useEffect(() => { loadEvents() }, [])
+  useEffect(() => { loadEvents() }, [currentDate])
 
   async function loadEvents() {
     try {
+      const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
+      const endOfNextMonth = new Date(year, month + 2, 0).toISOString().split('T')[0]
       const { data } = await supabase
         .from('calendar_events')
         .select('*')
+        .gte('event_date', startOfMonth)
+        .lte('event_date', endOfNextMonth)
         .order('event_date', { ascending: true })
         .order('event_time', { ascending: true })
       setEvents(data || [])
@@ -54,21 +68,44 @@ export default function CalendarView({ onNavigate }) {
     setFormData({
       title: '', description: '', event_date: new Date().toISOString().split('T')[0],
       event_time: '', event_type: 'general', family_member: 'Family',
-      location: '', all_day: false, duration_minutes: 60
+      location: '', all_day: false, duration_minutes: 60,
+      recurring_pattern: ''
     })
     setEditingEvent(null)
+    setRecurrenceCount(12)
+  }
+
+  function getNextOccurrences(dateStr, pattern, count) {
+    const dates = [dateStr]
+    if (!pattern) return dates
+    const start = new Date(dateStr + 'T12:00:00')
+    for (let i = 1; i < count; i++) {
+      const next = new Date(start)
+      if (pattern === 'daily') next.setDate(next.getDate() + i)
+      else if (pattern === 'weekly') next.setDate(next.getDate() + i * 7)
+      else if (pattern === 'biweekly') next.setDate(next.getDate() + i * 14)
+      else if (pattern === 'monthly') next.setMonth(next.getMonth() + i)
+      dates.push(next.toISOString().split('T')[0])
+    }
+    return dates
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     if (!formData.title.trim()) return
     try {
-      const payload = { ...formData, title: formData.title.trim() }
+      const basePayload = { ...formData, title: formData.title.trim() }
+      
       if (editingEvent) {
-        await supabase.from('calendar_events').update(payload).eq('id', editingEvent.id)
+        await supabase.from('calendar_events').update(basePayload).eq('id', editingEvent.id)
+      } else if (basePayload.recurring_pattern) {
+        const dates = getNextOccurrences(basePayload.event_date, basePayload.recurring_pattern, recurrenceCount)
+        const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
+        await supabase.from('calendar_events').insert(inserts)
       } else {
-        await supabase.from('calendar_events').insert(payload)
+        await supabase.from('calendar_events').insert(basePayload)
       }
+      
       resetForm()
       setShowForm(false)
       loadEvents()
@@ -94,7 +131,8 @@ export default function CalendarView({ onNavigate }) {
       event_date: ev.event_date, event_time: ev.event_time || '',
       event_type: ev.event_type, family_member: ev.family_member,
       location: ev.location || '', all_day: ev.all_day,
-      duration_minutes: ev.duration_minutes
+      duration_minutes: ev.duration_minutes,
+      recurring_pattern: ev.recurring_pattern || ''
     })
     setShowForm(true)
   }
@@ -194,6 +232,7 @@ export default function CalendarView({ onNavigate }) {
                 <div className="event-item-meta">
                   {!ev.all_day && ev.event_time && <><Clock size={12} /> {ev.event_time.substring(0, 5)}  </>}
                   {ev.location && <><MapPin size={12} /> {ev.location}  </>}
+                  {ev.recurring_pattern && <span className="badge badge-orange" style={{ marginLeft: 4 }}>{ev.recurring_pattern}</span>}
                   <span className={`event-item-member ${ev.family_member.toLowerCase()}`}>
                     {ev.family_member}
                   </span>
@@ -262,10 +301,40 @@ export default function CalendarView({ onNavigate }) {
                 <label>Location</label>
                 <input value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} placeholder="Location" />
               </div>
+
+              {/* Recurrence */}
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Recurrence</label>
+                  <select value={formData.recurring_pattern} onChange={e => setFormData({ ...formData, recurring_pattern: e.target.value })}>
+                    {RECURRENCE_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {formData.recurring_pattern && !editingEvent && (
+                  <div className="form-group">
+                    <label>Generate (weeks/months)</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="52"
+                      value={recurrenceCount}
+                      onChange={e => setRecurrenceCount(parseInt(e.target.value) || 12)}
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="form-group">
                 <label>Description</label>
                 <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Details..." />
               </div>
+              {formData.recurring_pattern && !editingEvent && (
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                  This will generate {recurrenceCount} events starting from the selected date.
+                </div>
+              )}
               <div className="form-actions">
                 <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">
