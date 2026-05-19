@@ -8,6 +8,7 @@ export default function ShoppingList() {
   const [newItem, setNewItem] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState('pending')
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     item: '', category: 'groceries', quantity: 1, notes: '', added_by: 'Family'
   })
@@ -51,10 +52,12 @@ export default function ShoppingList() {
   function resetForm() {
     setFormData({ item: '', category: 'groceries', quantity: 1, notes: '', added_by: 'Family' })
     setNewItem('')
+    setError('')
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    setError('')
     if (!formData.item.trim()) return
     try {
       await supabase.from('shopping_list').insert({
@@ -69,6 +72,7 @@ export default function ShoppingList() {
       loadItems()
     } catch (err) {
       console.error('Failed to add:', err)
+      setError('Failed to add: ' + err.message)
     }
   }
 
@@ -83,6 +87,7 @@ export default function ShoppingList() {
 
   async function quickAdd(e) {
     e.preventDefault()
+    setError('')
     if (!newItem.trim()) return
     try {
       await supabase.from('shopping_list').insert({
@@ -93,6 +98,7 @@ export default function ShoppingList() {
       loadItems()
     } catch (err) {
       console.error('Failed to add:', err)
+      setError('Failed to add: ' + err.message)
     }
   }
 
@@ -117,7 +123,7 @@ export default function ShoppingList() {
           placeholder="Quick add an item..."
         />
         <button type="button" className="btn btn-primary" onClick={quickAdd}><Plus size={16} /></button>
-        <button type="button" className="btn" onClick={() => { resetForm(); setShowForm(true) }} style={{ whiteSpace: 'nowrap' }}>
+        <button type="button" className="btn" onClick={() => { setError(''); resetForm(); setShowForm(true) }} style={{ whiteSpace: 'nowrap' }}>
           + Details
         </button>
       </div>
@@ -177,6 +183,12 @@ export default function ShoppingList() {
         )}
       </div>
 
+      {error && (
+        <div style={{ padding: '10px 14px', background: 'rgba(220,53,69,0.08)', color: 'var(--red)', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
       {/* Add Item Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
@@ -201,7 +213,6 @@ export default function ShoppingList() {
                   <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
                     <option value="groceries">Groceries</option>
                     <option value="household">Household</option>
-                    <option value="personal">Personal</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
