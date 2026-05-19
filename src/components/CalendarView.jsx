@@ -32,7 +32,7 @@ export default function CalendarView({ onNavigate }) {
   const [recurrenceCount, setRecurrenceCount] = useState(12)
   const [formData, setFormData] = useState({
     title: '', description: '', event_date: new Date().toISOString().split('T')[0],
-    event_time: '', event_type: 'general', family_member: 'Family',
+    event_end_date: '', event_time: '', event_type: 'general', family_member: 'Family',
     location: '', all_day: false, duration_minutes: 60,
     recurring_pattern: ''
   })
@@ -67,7 +67,7 @@ export default function CalendarView({ onNavigate }) {
   function resetForm() {
     setFormData({
       title: '', description: '', event_date: new Date().toISOString().split('T')[0],
-      event_time: '', event_type: 'general', family_member: 'Family',
+      event_end_date: '', event_time: '', event_type: 'general', family_member: 'Family',
       location: '', all_day: false, duration_minutes: 60,
       recurring_pattern: ''
     })
@@ -100,6 +100,18 @@ export default function CalendarView({ onNavigate }) {
         await supabase.from('calendar_events').update(basePayload).eq('id', editingEvent.id)
       } else if (basePayload.recurring_pattern) {
         const dates = getNextOccurrences(basePayload.event_date, basePayload.recurring_pattern, recurrenceCount)
+        const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
+        await supabase.from('calendar_events').insert(inserts)
+      } else if (basePayload.event_end_date && basePayload.event_end_date !== basePayload.event_date) {
+        // Multi-day event: create one event per day
+        const start = new Date(basePayload.event_date + 'T12:00:00')
+        const end = new Date(basePayload.event_end_date + 'T12:00:00')
+        const dates = []
+        const current = new Date(start)
+        while (current <= end) {
+          dates.push(current.toISOString().split('T')[0])
+          current.setDate(current.getDate() + 1)
+        }
         const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
         await supabase.from('calendar_events').insert(inserts)
       } else {
@@ -255,7 +267,11 @@ export default function CalendarView({ onNavigate }) {
                   {ev.title}
                 </div>
                 <div className="event-item-meta">
-                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {formatTime(ev.event_time)}{ev.duration_minutes ? ` – ${formatEndTime(ev.event_time, ev.duration_minutes)}` : ''}  </>}
+                  {ev.duration_minutes === 0 ? (
+                    <><Clock size={12} /> All Day</>
+                  ) : ev.event_time ? (
+                    <><Clock size={12} /> {formatTime(ev.event_time)}{ev.duration_minutes > 0 ? ` – ${formatEndTime(ev.event_time, ev.duration_minutes)}` : ''}  </>
+                  ) : null}
                   {ev.location && <><MapPin size={12} /> {ev.location}  </>}
                   {ev.recurring_pattern && <span className="badge badge-orange" style={{ marginLeft: 4 }}>{ev.recurring_pattern}</span>}
                   <span className={`event-item-member ${ev.family_member.toLowerCase()}`}>
@@ -294,18 +310,27 @@ export default function CalendarView({ onNavigate }) {
                   <input type="time" value={formData.event_time} onChange={e => setFormData({ ...formData, event_time: e.target.value })} />
                 </div>
               </div>
-              <div className="form-group">
-                <label>Duration</label>
-                <select value={formData.duration_minutes} onChange={e => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}>
-                  <option value="15">15 min</option>
-                  <option value="30">30 min</option>
-                  <option value="45">45 min</option>
-                  <option value="60">1 hour</option>
-                  <option value="90">1.5 hours</option>
-                  <option value="120">2 hours</option>
-                  <option value="180">3 hours</option>
-                  <option value="240">4 hours</option>
-                </select>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Duration</label>
+                  <select value={formData.duration_minutes} onChange={e => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) })}>
+                    <option value="0">All Day</option>
+                    <option value="15">15 min</option>
+                    <option value="30">30 min</option>
+                    <option value="45">45 min</option>
+                    <option value="60">1 hour</option>
+                    <option value="90">1.5 hours</option>
+                    <option value="120">2 hours</option>
+                    <option value="180">3 hours</option>
+                    <option value="240">4 hours</option>
+                  </select>
+                </div>
+                {formData.duration_minutes === 0 && (
+                  <div className="form-group">
+                    <label>End Date</label>
+                    <input type="date" value={formData.event_end_date} onChange={e => setFormData({ ...formData, event_end_date: e.target.value })} />
+                  </div>
+                )}
               </div>
               <div className="form-row">
                 <div className="form-group">
