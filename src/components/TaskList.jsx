@@ -96,7 +96,7 @@ export default function TaskList() {
           onKeyDown={e => e.key === 'Enter' && addTask(e)}
           placeholder="Add a task..."
         />
-        <button className="btn btn-primary" onClick={addTask}><Plus size={16} /></button>
+        <button type="button" className="btn btn-primary" onClick={addTask}><Plus size={16} /></button>
       </div>
 
       <div className="filter-bar" style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>

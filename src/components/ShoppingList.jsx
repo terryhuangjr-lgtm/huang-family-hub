@@ -89,7 +89,7 @@ export default function ShoppingList() {
           onKeyDown={e => e.key === 'Enter' && addItem(e)}
           placeholder="Add an item..."
         />
-        <button className="btn btn-primary" onClick={addItem}><Plus size={16} /></button>
+        <button type="button" className="btn btn-primary" onClick={addItem}><Plus size={16} /></button>
       </div>
 
       <div className="filter-bar" style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
