@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, X, Trash2, Edit3 } from 'lucide-react'
+import { Plus, X, Trash2, Edit3, Check } from 'lucide-react'
 
 export default function Watchlist() {
   const [items, setItems] = useState([])
@@ -8,6 +8,7 @@ export default function Watchlist() {
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [activeCategory, setActiveCategory] = useState('movie')
+  const [activeFilter, setActiveFilter] = useState('pending')
   const [formData, setFormData] = useState({
     title: '', media_type: 'movie', notes: ''
   })
@@ -21,7 +22,6 @@ export default function Watchlist() {
       const { data } = await supabase
         .from('watchlist')
         .select('*')
-        .eq('watched', false)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
       setItems(data || [])
@@ -62,12 +62,16 @@ export default function Watchlist() {
     }
   }
 
-  async function markWatched(item) {
+  async function toggleWatched(item) {
+    const newWatched = !item.watched
     try {
-      await supabase.from('watchlist').update({ watched: true, watched_at: new Date().toISOString() }).eq('id', item.id)
+      await supabase.from('watchlist').update({
+        watched: newWatched,
+        watched_at: newWatched ? new Date().toISOString() : null
+      }).eq('id', item.id)
       loadItems()
     } catch (err) {
-      console.error('Failed to mark watched:', err)
+      console.error('Failed to toggle:', err)
     }
   }
 
@@ -99,8 +103,12 @@ export default function Watchlist() {
   const categories = ['movie', 'tv_show', 'documentary', 'anime']
   const categoryLabels = { movie: 'Movie', tv_show: 'TV Show', documentary: 'Documentary', anime: 'Anime' }
 
-  const filteredItems = items.filter(i =>
-    activeCategory === 'all' || i.media_type === activeCategory
+  const filteredByWatch = items.filter(i =>
+    activeFilter === 'all' ? true : activeFilter === 'watched' ? i.watched : !i.watched
+  )
+
+  const filteredItems = filteredByWatch.filter(i =>
+    activeCategory === 'all' ? true : i.media_type === activeCategory
   )
 
   if (loading) return <div className="loading-state">Loading watchlist...</div>
@@ -110,6 +118,24 @@ export default function Watchlist() {
       <div className="page-header">
         <h1>Watchlist</h1>
         <p>Movies and shows we want to watch</p>
+      </div>
+
+      <div className="filter-bar" style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        {['pending', 'watched', 'all'].map(f => (
+          <button
+            key={f}
+            onClick={() => setActiveFilter(f)}
+            style={{
+              padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)',
+              background: activeFilter === f ? 'var(--orange-light)' : 'transparent',
+              color: activeFilter === f ? 'var(--orange)' : 'var(--text-secondary)',
+              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              borderColor: activeFilter === f ? 'var(--orange)' : 'var(--border)'
+            }}
+          >
+            {f === 'all' ? 'All' : f === 'watched' ? 'Watched' : 'To Watch'}
+          </button>
+        ))}
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -136,20 +162,34 @@ export default function Watchlist() {
 
       <div className="card">
         {filteredItems.length === 0 ? (
-          <div className="empty-state">Nothing here</div>
+          <div className="empty-state">
+            {activeFilter === 'watched' ? 'Nothing watched yet' : 'Nothing to watch'}
+          </div>
         ) : (
           filteredItems.map(item => (
             <div key={item.id} className="list-item">
+              <div
+                className={`checkbox ${item.watched ? 'checked' : ''}`}
+                onClick={() => toggleWatched(item)}
+              >
+                {item.watched && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
               <div className="list-item-content">
-                <div className="list-item-title">{item.title}</div>
+                <div className="list-item-title" style={{ textDecoration: item.watched ? 'line-through' : 'none', color: item.watched ? 'var(--text-muted)' : 'var(--text)' }}>
+                  {item.title}
+                </div>
                 <div className="list-item-sub">
-                  {item.notes && <>{item.notes}</>}
+                  <span className={`badge badge-${item.media_type === 'movie' ? 'orange' : item.media_type === 'tv_show' ? 'blue' : 'gray'}`}>
+                    {categoryLabels[item.media_type]}
+                  </span>
+                  {item.notes && <> — {item.notes}</>}
                   {item.added_by && <> Added by {item.added_by}</>}
                 </div>
               </div>
-              <button onClick={() => markWatched(item)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: 4, fontSize: 11 }}>
-                ✓ Watched
-              </button>
               <button onClick={() => openEdit(item)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: 4 }} title="Edit">
                 <Edit3 size={14} />
               </button>
