@@ -141,6 +141,17 @@ export default function CalendarView({ onNavigate }) {
   const selectedStr = selectedDate || todayStr
   const dayEvents = events.filter(e => e.event_date === selectedStr)
 
+  function formatTime(timeStr) {
+    if (!timeStr) return ''
+    const parts = timeStr.split(':')
+    let h = parseInt(parts[0], 10)
+    let m = parts[1] || '00'
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    if (h === 0) h = 12
+    else if (h > 12) h -= 12
+    return `${h}:${m} ${ampm} ET`
+  }
+
   function getEventsForDay(day) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     return events.filter(e => e.event_date === dateStr)
@@ -230,7 +241,7 @@ export default function CalendarView({ onNavigate }) {
                   {ev.title}
                 </div>
                 <div className="event-item-meta">
-                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {new Date('2000-01-01T' + ev.event_time + ':00-05:00').toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}  </>}
+                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {formatTime(ev.event_time)}  </>}
                   {ev.location && <><MapPin size={12} /> {ev.location}  </>}
                   {ev.recurring_pattern && <span className="badge badge-orange" style={{ marginLeft: 4 }}>{ev.recurring_pattern}</span>}
                   <span className={`event-item-member ${ev.family_member.toLowerCase()}`}>
