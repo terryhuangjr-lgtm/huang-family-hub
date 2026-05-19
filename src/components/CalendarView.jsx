@@ -230,7 +230,7 @@ export default function CalendarView({ onNavigate }) {
                   {ev.title}
                 </div>
                 <div className="event-item-meta">
-                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {ev.event_time.substring(0, 5)}  </>}
+                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {new Date('2000-01-01T' + ev.event_time + ':00-05:00').toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}  </>}
                   {ev.location && <><MapPin size={12} /> {ev.location}  </>}
                   {ev.recurring_pattern && <span className="badge badge-orange" style={{ marginLeft: 4 }}>{ev.recurring_pattern}</span>}
                   <span className={`event-item-member ${ev.family_member.toLowerCase()}`}>

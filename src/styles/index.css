@@ -43,20 +43,20 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  max-width: 800px;
+  max-width: 1024px;
   margin: 0 auto;
 }
 
 /* Top Header */
 .top-header {
-  padding: 20px 20px 0;
+  padding: 24px 28px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .header-title {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.5px;
@@ -112,7 +112,7 @@ body {
 
 .main-content {
   flex: 1;
-  padding: 20px;
+  padding: 24px 28px;
 }
 
 .content-area {
@@ -168,7 +168,7 @@ body {
 }
 
 .page-header h1 {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text);
   margin-bottom: 4px;
@@ -746,6 +746,38 @@ body {
   font-size: 14px;
 }
 
+/* Meal Plan - Unified Grid */
+.meal-grid-unified {
+  display: grid;
+  grid-template-columns: 72px repeat(7, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.meal-grid-header {
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-grid-cell {
+  background: var(--bg);
+  padding: 8px 6px;
+  min-height: 60px;
+  transition: background 0.1s;
+}
+
+.meal-grid-cell:hover {
+  background: var(--orange-light);
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .main-content {
@@ -761,7 +793,15 @@ body {
   .form-row {
     grid-template-columns: 1fr;
   }
-  .meal-grid {
-    grid-template-columns: 60px 1fr;
+  .meal-grid-unified {
+    grid-template-columns: 56px repeat(7, 1fr);
+  }
+  .meal-grid-header {
+    font-size: 10px;
+    padding: 8px 4px;
+  }
+  .meal-grid-cell {
+    padding: 6px 4px;
+    min-height: 48px;
   }
 }
