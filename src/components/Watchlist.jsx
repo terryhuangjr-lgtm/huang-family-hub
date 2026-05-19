@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, X, Trash2, Edit3, Check } from 'lucide-react'
+import { Plus, X, Trash2, Edit3 } from 'lucide-react'
 
 export default function Watchlist() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const [activeCategory, setActiveCategory] = useState('movie')
+  const [activeCategory, setActiveCategory] = useState('all')
   const [activeFilter, setActiveFilter] = useState('pending')
   const [formData, setFormData] = useState({
-    title: '', media_type: 'movie', notes: ''
+    title: '', media_type: 'movie', notes: '', added_by: 'Family'
   })
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function Watchlist() {
   }
 
   function resetForm() {
-    setFormData({ title: '', media_type: activeCategory, notes: '' })
+    setFormData({ title: '', media_type: 'movie', notes: '', added_by: 'Family' })
     setEditItem(null)
   }
 
@@ -41,18 +41,16 @@ export default function Watchlist() {
     e.preventDefault()
     if (!formData.title.trim()) return
     try {
+      const payload = {
+        title: formData.title.trim(),
+        media_type: formData.media_type,
+        notes: formData.notes || null,
+        added_by: formData.added_by
+      }
       if (editItem) {
-        await supabase.from('watchlist').update({
-          title: formData.title.trim(),
-          media_type: formData.media_type,
-          notes: formData.notes || null
-        }).eq('id', editItem.id)
+        await supabase.from('watchlist').update(payload).eq('id', editItem.id)
       } else {
-        await supabase.from('watchlist').insert({
-          title: formData.title.trim(),
-          media_type: formData.media_type,
-          notes: formData.notes || null
-        })
+        await supabase.from('watchlist').insert(payload)
       }
       resetForm()
       setShowForm(false)
@@ -89,19 +87,19 @@ export default function Watchlist() {
     setFormData({
       title: item.title,
       media_type: item.media_type,
-      notes: item.notes || ''
+      notes: item.notes || '',
+      added_by: item.added_by || 'Family'
     })
     setShowForm(true)
   }
 
   function openAdd() {
     resetForm()
-    setFormData({ ...formData, media_type: activeCategory })
     setShowForm(true)
   }
 
-  const categories = ['movie', 'tv_show', 'documentary', 'anime']
-  const categoryLabels = { movie: 'Movie', tv_show: 'TV Show', documentary: 'Documentary', anime: 'Anime' }
+  const categories = ['all', 'movie', 'tv_show', 'documentary', 'anime']
+  const categoryLabels = { all: 'All', movie: 'Movie', tv_show: 'TV Show', documentary: 'Documentary', anime: 'Anime' }
 
   const filteredByWatch = items.filter(i =>
     activeFilter === 'all' ? true : activeFilter === 'watched' ? i.watched : !i.watched
@@ -139,7 +137,7 @@ export default function Watchlist() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {categories.map(cat => (
+        {['all', 'movie', 'tv_show', 'documentary', 'anime'].map(cat => (
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
@@ -219,11 +217,24 @@ export default function Watchlist() {
                   autoFocus
                 />
               </div>
-              <div className="form-group">
-                <label>Type</label>
-                <select value={formData.media_type} onChange={e => setFormData({ ...formData, media_type: e.target.value })}>
-                  {categories.map(c => <option key={c} value={c}>{categoryLabels[c]}</option>)}
-                </select>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Type</label>
+                  <select value={formData.media_type} onChange={e => setFormData({ ...formData, media_type: e.target.value })}>
+                    <option value="movie">Movie</option>
+                    <option value="tv_show">TV Show</option>
+                    <option value="documentary">Documentary</option>
+                    <option value="anime">Anime</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Added By</label>
+                  <select value={formData.added_by} onChange={e => setFormData({ ...formData, added_by: e.target.value })}>
+                    <option value="Family">Family</option>
+                    <option value="Terry">Terry</option>
+                    <option value="Donna">Donna</option>
+                  </select>
+                </div>
               </div>
               <div className="form-group">
                 <label>Notes</label>
