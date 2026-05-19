@@ -1,0 +1,281 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { X, ChevronLeft, ChevronRight, Plus, Clock, MapPin, Trash2 } from 'lucide-react'
+
+const MEMBER_COLORS = {
+  Terry: '#007bff',
+  Donna: '#28a745',
+  Sienna: '#e83e8c',
+  Genevieve: '#6f42c1',
+  Family: '#f7931a'
+}
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December']
+
+export default function CalendarView({ onNavigate }) {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editingEvent, setEditingEvent] = useState(null)
+  const [formData, setFormData] = useState({
+    title: '', description: '', event_date: new Date().toISOString().split('T')[0],
+    event_time: '', event_type: 'general', family_member: 'Family',
+    location: '', all_day: false, duration_minutes: 60
+  })
+
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const prevMonthDays = new Date(year, month, 0).getDate()
+
+  useEffect(() => { loadEvents() }, [])
+
+  async function loadEvents() {
+    try {
+      const { data } = await supabase
+        .from('calendar_events')
+        .select('*')
+        .order('event_date', { ascending: true })
+        .order('event_time', { ascending: true })
+      setEvents(data || [])
+    } catch (err) {
+      console.error('Failed to load events:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function resetForm() {
+    setFormData({
+      title: '', description: '', event_date: new Date().toISOString().split('T')[0],
+      event_time: '', event_type: 'general', family_member: 'Family',
+      location: '', all_day: false, duration_minutes: 60
+    })
+    setEditingEvent(null)
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!formData.title.trim()) return
+    try {
+      const payload = { ...formData, title: formData.title.trim() }
+      if (editingEvent) {
+        await supabase.from('calendar_events').update(payload).eq('id', editingEvent.id)
+      } else {
+        await supabase.from('calendar_events').insert(payload)
+      }
+      resetForm()
+      setShowForm(false)
+      loadEvents()
+    } catch (err) {
+      console.error('Failed to save event:', err)
+    }
+  }
+
+  async function deleteEvent(id) {
+    if (!confirm('Delete this event?')) return
+    try {
+      await supabase.from('calendar_events').delete().eq('id', id)
+      loadEvents()
+    } catch (err) {
+      console.error('Failed to delete:', err)
+    }
+  }
+
+  function editEvent(ev) {
+    setEditingEvent(ev)
+    setFormData({
+      title: ev.title, description: ev.description || '',
+      event_date: ev.event_date, event_time: ev.event_time || '',
+      event_type: ev.event_type, family_member: ev.family_member,
+      location: ev.location || '', all_day: ev.all_day,
+      duration_minutes: ev.duration_minutes
+    })
+    setShowForm(true)
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0]
+  const selectedStr = selectedDate || todayStr
+  const dayEvents = events.filter(e => e.event_date === selectedStr)
+
+  function getEventsForDay(day) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    return events.filter(e => e.event_date === dateStr)
+  }
+
+  function prevMonth() { setCurrentDate(new Date(year, month - 1, 1)) }
+  function nextMonth() { setCurrentDate(new Date(year, month + 1, 1)) }
+
+  const days = []
+  for (let i = 0; i < firstDay; i++) {
+    days.push({ day: prevMonthDays - firstDay + i + 1, other: true })
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    days.push({ day: i, other: false })
+  }
+  const remaining = 7 - (days.length % 7)
+  if (remaining < 7) {
+    for (let i = 1; i <= remaining; i++) {
+      days.push({ day: i, other: true })
+    }
+  }
+
+  if (loading) return <div className="loading-state">Loading calendar...</div>
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1>Family Calendar</h1>
+        <p>Shared calendar for the Huang family</p>
+      </div>
+
+      <div className="calendar-nav">
+        <div className="calendar-nav-buttons">
+          <button className="btn btn-sm" onClick={prevMonth}><ChevronLeft size={16} /></button>
+          <button className="btn btn-sm" onClick={nextMonth}><ChevronRight size={16} /></button>
+        </div>
+        <h2>{MONTHS[month]} {year}</h2>
+        <button className="btn btn-primary btn-sm" onClick={() => { resetForm(); setShowForm(true) }}>
+          <Plus size={14} /> Add
+        </button>
+      </div>
+
+      <div className="calendar-grid">
+        {DAYS.map(d => <div key={d} className="calendar-day-header">{d}</div>)}
+        {days.map((d, i) => {
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`
+          const dayEvents = getEventsForDay(d.day)
+          const isToday = dateStr === todayStr
+          const isSelected = dateStr === selectedStr
+          return (
+            <div
+              key={i}
+              className={`calendar-day ${d.other ? 'other-month' : ''} ${isToday ? 'today' : ''}`}
+              onClick={() => setSelectedDate(dateStr)}
+              style={isSelected ? { background: 'var(--orange-light)' } : {}}
+            >
+              <div className="calendar-day-number">{d.day}</div>
+              <div>
+                {[...new Set(dayEvents.map(e => e.family_member))].map(m => (
+                  <div key={m} className={`calendar-event-dot ${m.toLowerCase()}`} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Selected Day Events */}
+      <div className="event-list">
+        <div className="event-list-header">
+          <h3>{new Date(selectedStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
+          <button className="btn btn-sm btn-primary" onClick={() => {
+            resetForm()
+            setFormData(prev => ({ ...prev, event_date: selectedStr }))
+            setShowForm(true)
+          }}>
+            <Plus size={14} /> Add
+          </button>
+        </div>
+        {dayEvents.length === 0 ? (
+          <div className="empty-state">No events for this day</div>
+        ) : (
+          dayEvents.map(ev => (
+            <div key={ev.id} className={`event-item ${ev.family_member.toLowerCase()}`}>
+              <div className="event-item-content">
+                <div className="event-item-title" onClick={() => editEvent(ev)} style={{ cursor: 'pointer' }}>
+                  {ev.title}
+                </div>
+                <div className="event-item-meta">
+                  {!ev.all_day && ev.event_time && <><Clock size={12} /> {ev.event_time.substring(0, 5)}  </>}
+                  {ev.location && <><MapPin size={12} /> {ev.location}  </>}
+                  <span className={`event-item-member ${ev.family_member.toLowerCase()}`}>
+                    {ev.family_member}
+                  </span>
+                </div>
+              </div>
+              <button className="btn btn-icon btn-sm" onClick={() => deleteEvent(ev.id)} style={{ border: 'none', color: 'var(--text-muted)' }}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Add/Edit Modal */}
+      {showForm && (
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingEvent ? 'Edit Event' : 'New Event'}</h2>
+              <button className="modal-close" onClick={() => setShowForm(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label>Title</label>
+                <input value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} placeholder="Event title" autoFocus />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Date</label>
+                  <input type="date" value={formData.event_date} onChange={e => setFormData({ ...formData, event_date: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label>Time</label>
+                  <input type="time" value={formData.event_time} onChange={e => setFormData({ ...formData, event_time: e.target.value })} />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Type</label>
+                  <select value={formData.event_type} onChange={e => setFormData({ ...formData, event_type: e.target.value })}>
+                    <option value="general">General</option>
+                    <option value="appointment">Appointment</option>
+                    <option value="school">School</option>
+                    <option value="activity">Activity</option>
+                    <option value="trip">Trip</option>
+                    <option value="birthday">Birthday</option>
+                    <option value="holiday">Holiday</option>
+                    <option value="doctor">Doctor</option>
+                    <option value="sport">Sport</option>
+                    <option value="date_night">Date Night</option>
+                    <option value="meal">Meal</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Family Member</label>
+                  <select value={formData.family_member} onChange={e => setFormData({ ...formData, family_member: e.target.value })}>
+                    <option value="Family">Family</option>
+                    <option value="Terry">Terry</option>
+                    <option value="Donna">Donna</option>
+                    <option value="Sienna">Sienna</option>
+                    <option value="Genevieve">Genevieve</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Location</label>
+                <input value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} placeholder="Location" />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Details..." />
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">
+                  {editingEvent ? 'Update' : 'Add Event'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
