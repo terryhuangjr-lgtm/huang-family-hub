@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { CalendarDays, ListTodo, ShoppingCart, UtensilsCrossed, Clapperboard } from 'lucide-react'
+import { CalendarDays, ListTodo, ShoppingCart, UtensilsCrossed, Clapperboard, Utensils } from 'lucide-react'
 import CalendarView from './components/CalendarView'
 import TaskList from './components/TaskList'
 import ShoppingList from './components/ShoppingList'
 import MealPlan from './components/MealPlan'
 import Watchlist from './components/Watchlist'
+import Restaurants from './components/Restaurants'
 import './styles/index.css'
 
 const navItems = [
@@ -13,6 +14,7 @@ const navItems = [
   { id: 'shopping', label: 'Shopping', icon: ShoppingCart },
   { id: 'meals', label: 'Meals', icon: UtensilsCrossed },
   { id: 'watchlist', label: 'Watchlist', icon: Clapperboard },
+  { id: 'restaurants', label: 'Restaurants', icon: Utensils },
 ]
 
 export default function App() {
@@ -49,6 +51,7 @@ export default function App() {
           {activeView === 'shopping' && <ShoppingList />}
           {activeView === 'meals' && <MealPlan />}
           {activeView === 'watchlist' && <Watchlist />}
+          {activeView === 'restaurants' && <Restaurants />}
         </div>
       </main>
     </div>
