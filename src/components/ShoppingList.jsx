@@ -8,6 +8,9 @@ export default function ShoppingList() {
   const [newItem, setNewItem] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState('pending')
+  const [formData, setFormData] = useState({
+    item: '', category: 'groceries', quantity: 1, notes: '', added_by: 'Family'
+  })
 
   useEffect(() => {
     loadItems()
@@ -45,15 +48,24 @@ export default function ShoppingList() {
     }
   }
 
-  async function addItem(e) {
+  function resetForm() {
+    setFormData({ item: '', category: 'groceries', quantity: 1, notes: '', added_by: 'Family' })
+    setNewItem('')
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault()
-    if (!newItem.trim()) return
+    if (!formData.item.trim()) return
     try {
       await supabase.from('shopping_list').insert({
-        item: newItem.trim(),
-        added_by: 'Family'
+        item: formData.item.trim(),
+        category: formData.category,
+        quantity: formData.quantity || 1,
+        notes: formData.notes || null,
+        added_by: formData.added_by
       })
-      setNewItem('')
+      resetForm()
+      setShowForm(false)
       loadItems()
     } catch (err) {
       console.error('Failed to add:', err)
@@ -66,6 +78,21 @@ export default function ShoppingList() {
       loadItems()
     } catch (err) {
       console.error('Failed to delete:', err)
+    }
+  }
+
+  async function quickAdd(e) {
+    e.preventDefault()
+    if (!newItem.trim()) return
+    try {
+      await supabase.from('shopping_list').insert({
+        item: newItem.trim(),
+        added_by: 'Family'
+      })
+      setNewItem('')
+      loadItems()
+    } catch (err) {
+      console.error('Failed to add:', err)
     }
   }
 
@@ -86,10 +113,13 @@ export default function ShoppingList() {
         <input
           value={newItem}
           onChange={e => setNewItem(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addItem(e)}
-          placeholder="Add an item..."
+          onKeyDown={e => e.key === 'Enter' && quickAdd(e)}
+          placeholder="Quick add an item..."
         />
-        <button type="button" className="btn btn-primary" onClick={addItem}><Plus size={16} /></button>
+        <button type="button" className="btn btn-primary" onClick={quickAdd}><Plus size={16} /></button>
+        <button type="button" className="btn" onClick={() => { resetForm(); setShowForm(true) }} style={{ whiteSpace: 'nowrap' }}>
+          + Details
+        </button>
       </div>
 
       <div className="filter-bar" style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
@@ -135,6 +165,7 @@ export default function ShoppingList() {
                     {item.category}
                   </span>
                   {item.quantity && <> x{item.quantity}</>}
+                  {item.notes && <> — {item.notes}</>}
                   {item.added_by && <> Added by {item.added_by}</>}
                 </div>
               </div>
@@ -145,6 +176,71 @@ export default function ShoppingList() {
           ))
         )}
       </div>
+
+      {/* Add Item Modal */}
+      {showForm && (
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Item</h2>
+              <button className="modal-close" onClick={() => setShowForm(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label>Item</label>
+                <input
+                  value={formData.item}
+                  onChange={e => setFormData({ ...formData, item: e.target.value })}
+                  placeholder="What do we need?"
+                  autoFocus
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Category</label>
+                  <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                    <option value="groceries">Groceries</option>
+                    <option value="household">Household</option>
+                    <option value="personal">Personal</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.quantity}
+                    onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Added By</label>
+                  <select value={formData.added_by} onChange={e => setFormData({ ...formData, added_by: e.target.value })}>
+                    <option value="Family">Family</option>
+                    <option value="Terry">Terry</option>
+                    <option value="Donna">Donna</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Notes</label>
+                <input
+                  value={formData.notes}
+                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Brand, size, special instructions..."
+                />
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Item</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
