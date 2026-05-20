@@ -25,13 +25,15 @@ const RECURRENCE_OPTIONS = [
 export default function CalendarView({ onNavigate }) {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [currentDate, setCurrentDate] = useState(new Date())
+  const [currentDate, setCurrentDate] = useState(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  )
   const [selectedDate, setSelectedDate] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
   const [recurrenceCount, setRecurrenceCount] = useState(12)
   const [formData, setFormData] = useState({
-    title: '', description: '', event_date: new Date().toISOString().split('T')[0],
+    title: '', description: '', event_date: getLocalDateStr(new Date()),
     event_end_date: '', event_time: '', event_type: 'general', family_member: 'Family',
     location: '', all_day: false, duration_minutes: 60,
     recurring_pattern: ''
@@ -66,7 +68,7 @@ export default function CalendarView({ onNavigate }) {
 
   function resetForm() {
     setFormData({
-      title: '', description: '', event_date: new Date().toISOString().split('T')[0],
+      title: '', description: '', event_date: getLocalDateStr(new Date()),
       event_end_date: '', event_time: '', event_type: 'general', family_member: 'Family',
       location: '', all_day: false, duration_minutes: 60,
       recurring_pattern: ''
@@ -149,7 +151,13 @@ export default function CalendarView({ onNavigate }) {
     setShowForm(true)
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  function getLocalDateStr(d) {
+    const offset = d.getTimezoneOffset()
+    const local = new Date(d.getTime() - offset * 60000)
+    return local.toISOString().split('T')[0]
+  }
+
+  const todayStr = getLocalDateStr(new Date())
   const selectedStr = selectedDate || todayStr
   const dayEvents = events.filter(e => e.event_date === selectedStr)
 
