@@ -97,6 +97,8 @@ export default function CalendarView({ onNavigate }) {
     if (!formData.title.trim()) return
     try {
       const basePayload = { ...formData, title: formData.title.trim() }
+      // Strip form-only fields that aren't DB columns
+      const { event_end_date, ...dbPayload } = basePayload
       
       if (editingEvent) {
         // If single-row multi-day event (new pattern), delete old row for re-insert
@@ -115,7 +117,7 @@ export default function CalendarView({ onNavigate }) {
             }
           } else {
             // Single event: just update in place
-            await supabase.from('calendar_events').update(basePayload).eq('id', editingEvent.id)
+            await supabase.from('calendar_events').update(dbPayload).eq('id', editingEvent.id)
             resetForm()
             setShowForm(false)
             loadEvents()
@@ -124,24 +126,24 @@ export default function CalendarView({ onNavigate }) {
         }
       }
       
-      if (basePayload.recurring_pattern) {
-        const dates = getNextOccurrences(basePayload.event_date, basePayload.recurring_pattern, recurrenceCount)
-        const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
+      if (dbPayload.recurring_pattern) {
+        const dates = getNextOccurrences(dbPayload.event_date, dbPayload.recurring_pattern, recurrenceCount)
+        const inserts = dates.map(d => ({ ...dbPayload, event_date: d }))
         await supabase.from('calendar_events').insert(inserts)
-      } else if (basePayload.event_end_date && basePayload.event_end_date !== basePayload.event_date) {
+      } else if (event_end_date && event_end_date !== dbPayload.event_date) {
         // Multi-day event: create one event per day (most reliable display pattern)
-        const start = new Date(basePayload.event_date + 'T12:00:00')
-        const end = new Date(basePayload.event_end_date + 'T12:00:00')
+        const start = new Date(dbPayload.event_date + 'T12:00:00')
+        const end = new Date(event_end_date + 'T12:00:00')
         const dates = []
         const current = new Date(start)
         while (current <= end) {
           dates.push(current.toISOString().split('T')[0])
           current.setDate(current.getDate() + 1)
         }
-        const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
+        const inserts = dates.map(d => ({ ...dbPayload, event_date: d }))
         await supabase.from('calendar_events').insert(inserts)
       } else {
-        await supabase.from('calendar_events').insert(basePayload)
+        await supabase.from('calendar_events').insert(dbPayload)
       }
       
       resetForm()
