@@ -49,37 +49,16 @@ export default function CalendarView({ onNavigate }) {
 
   async function loadEvents() {
     try {
-      const startPrevMonth = new Date(year, month - 1, 1).toISOString().split('T')[0]
+      const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
       const endOfNextMonth = new Date(year, month + 2, 0).toISOString().split('T')[0]
-      // Fetch wider range: events starting up to a month before (to catch multi-day spans)
-      // Filtering by event_date <= endOfNextMonth to stay within our visible window
       const { data } = await supabase
         .from('calendar_events')
         .select('*')
-        .gte('event_date', startPrevMonth)
+        .gte('event_date', startOfMonth)
         .lte('event_date', endOfNextMonth)
         .order('event_date', { ascending: true })
         .order('event_time', { ascending: true })
-      
-      // Also fetch events that START even earlier but END during our visible range
-      // (catches multi-day events spanning from months ago)
-      const { data: spanData } = await supabase
-        .from('calendar_events')
-        .select('*')
-        .lt('event_date', startPrevMonth)
-        .gte('end_date', startPrevMonth)
-        .order('event_date', { ascending: true })
-        .order('event_time', { ascending: true })
-      
-      // Merge and deduplicate
-      const merged = [...(data || []), ...(spanData || [])]
-      const seen = new Set()
-      const unique = merged.filter(e => {
-        if (seen.has(e.id)) return false
-        seen.add(e.id)
-        return true
-      })
-      setEvents(unique)
+      setEvents(data || [])
     } catch (err) {
       console.error('Failed to load events:', err)
     } finally {
@@ -150,13 +129,17 @@ export default function CalendarView({ onNavigate }) {
         const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
         await supabase.from('calendar_events').insert(inserts)
       } else if (basePayload.event_end_date && basePayload.event_end_date !== basePayload.event_date) {
-        // Multi-day event: single row with end_date + all_day
-        const isAllDay = basePayload.duration_minutes === 0
-        await supabase.from('calendar_events').insert({
-          ...basePayload,
-          all_day: isAllDay || basePayload.all_day,
-          end_date: basePayload.event_end_date
-        })
+        // Multi-day event: create one event per day (most reliable display pattern)
+        const start = new Date(basePayload.event_date + 'T12:00:00')
+        const end = new Date(basePayload.event_end_date + 'T12:00:00')
+        const dates = []
+        const current = new Date(start)
+        while (current <= end) {
+          dates.push(current.toISOString().split('T')[0])
+          current.setDate(current.getDate() + 1)
+        }
+        const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
+        await supabase.from('calendar_events').insert(inserts)
       } else {
         await supabase.from('calendar_events').insert(basePayload)
       }
@@ -232,21 +215,8 @@ export default function CalendarView({ onNavigate }) {
     return false
   })
 
-  // Detect multi-day events: group by title+family_member across consecutive dates,
-  // OR single-row events with end_date set
+  // Detect multi-day events: group by title+family_member across consecutive dates
   function isMultiDay(event) {
-    // Single-row multi-day (new pattern: end_date + all_day)
-    if (event.end_date && event.all_day && event.end_date !== event.event_date) {
-      return {
-        isPartOfMultiDay: true,
-        isStart: true,
-        isEnd: event.event_date === selectedStr ? false : event.end_date === selectedStr,
-        isMiddle: event.event_date !== selectedStr && event.end_date !== selectedStr,
-        endDate: event.end_date
-      }
-    }
-    
-    // Legacy pattern: consecutive rows with same title+member
     const sameTitleAndMember = events.filter(e => 
       e.title === event.title && e.family_member === event.family_member
     ).sort((a, b) => a.event_date.localeCompare(b.event_date))
@@ -302,14 +272,7 @@ export default function CalendarView({ onNavigate }) {
 
   function getEventsForDay(day) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    // Direct match on event_date, OR multi-day event where date falls between event_date and end_date
-    return events.filter(e => {
-      if (e.event_date === dateStr) return true
-      if (e.end_date && e.all_day) {
-        return dateStr >= e.event_date && dateStr <= e.end_date
-      }
-      return false
-    })
+    return events.filter(e => e.event_date === dateStr)
   }
 
   function prevMonth() { setCurrentDate(new Date(year, month - 1, 1)) }
