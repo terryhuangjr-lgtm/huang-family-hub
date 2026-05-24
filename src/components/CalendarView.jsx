@@ -120,24 +120,28 @@ export default function CalendarView({ onNavigate }) {
       const basePayload = { ...formData, title: formData.title.trim() }
       
       if (editingEvent) {
-        // Find and update/replace multi-day range if applicable
-        const sameTitleAndMember = events.filter(e => 
-          e.title === editingEvent.title && e.family_member === editingEvent.family_member
-        ).sort((a, b) => a.event_date.localeCompare(b.event_date))
-        
-        if (sameTitleAndMember.length > 1) {
-          // Multi-day edit: delete old range, re-insert with updated data
-          const oldIds = sameTitleAndMember.map(e => e.id)
-          for (const id of oldIds) {
-            await supabase.from('calendar_events').delete().eq('id', id)
-          }
+        // If single-row multi-day event (new pattern), delete old row for re-insert
+        const isMultiDayRow = editingEvent.end_date && editingEvent.all_day && editingEvent.end_date !== editingEvent.event_date
+        if (isMultiDayRow) {
+          await supabase.from('calendar_events').delete().eq('id', editingEvent.id)
         } else {
-          // Single event edit: just update
-          await supabase.from('calendar_events').update(basePayload).eq('id', editingEvent.id)
-          resetForm()
-          setShowForm(false)
-          loadEvents()
-          return
+          // Legacy: find related multi-day rows by title+member
+          const sameTitleAndMember = events.filter(e => 
+            e.title === editingEvent.title && e.family_member === editingEvent.family_member
+          ).sort((a, b) => a.event_date.localeCompare(b.event_date))
+          if (sameTitleAndMember.length > 1) {
+            const oldIds = sameTitleAndMember.map(e => e.id)
+            for (const id of oldIds) {
+              await supabase.from('calendar_events').delete().eq('id', id)
+            }
+          } else {
+            // Single event: just update in place
+            await supabase.from('calendar_events').update(basePayload).eq('id', editingEvent.id)
+            resetForm()
+            setShowForm(false)
+            loadEvents()
+            return
+          }
         }
       }
       
@@ -146,17 +150,13 @@ export default function CalendarView({ onNavigate }) {
         const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
         await supabase.from('calendar_events').insert(inserts)
       } else if (basePayload.event_end_date && basePayload.event_end_date !== basePayload.event_date) {
-        // Multi-day event: create one event per day
-        const start = new Date(basePayload.event_date + 'T12:00:00')
-        const end = new Date(basePayload.event_end_date + 'T12:00:00')
-        const dates = []
-        const current = new Date(start)
-        while (current <= end) {
-          dates.push(current.toISOString().split('T')[0])
-          current.setDate(current.getDate() + 1)
-        }
-        const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
-        await supabase.from('calendar_events').insert(inserts)
+        // Multi-day event: single row with end_date + all_day
+        const isAllDay = basePayload.duration_minutes === 0
+        await supabase.from('calendar_events').insert({
+          ...basePayload,
+          all_day: isAllDay || basePayload.all_day,
+          end_date: basePayload.event_end_date
+        })
       } else {
         await supabase.from('calendar_events').insert(basePayload)
       }
