@@ -49,16 +49,37 @@ export default function CalendarView({ onNavigate }) {
 
   async function loadEvents() {
     try {
-      const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
+      const startPrevMonth = new Date(year, month - 1, 1).toISOString().split('T')[0]
       const endOfNextMonth = new Date(year, month + 2, 0).toISOString().split('T')[0]
+      // Fetch wider range: events starting up to a month before (to catch multi-day spans)
+      // Filtering by event_date <= endOfNextMonth to stay within our visible window
       const { data } = await supabase
         .from('calendar_events')
         .select('*')
-        .gte('event_date', startOfMonth)
+        .gte('event_date', startPrevMonth)
         .lte('event_date', endOfNextMonth)
         .order('event_date', { ascending: true })
         .order('event_time', { ascending: true })
-      setEvents(data || [])
+      
+      // Also fetch events that START even earlier but END during our visible range
+      // (catches multi-day events spanning from months ago)
+      const { data: spanData } = await supabase
+        .from('calendar_events')
+        .select('*')
+        .lt('event_date', startPrevMonth)
+        .gte('end_date', startPrevMonth)
+        .order('event_date', { ascending: true })
+        .order('event_time', { ascending: true })
+      
+      // Merge and deduplicate
+      const merged = [...(data || []), ...(spanData || [])]
+      const seen = new Set()
+      const unique = merged.filter(e => {
+        if (seen.has(e.id)) return false
+        seen.add(e.id)
+        return true
+      })
+      setEvents(unique)
     } catch (err) {
       console.error('Failed to load events:', err)
     } finally {
@@ -159,7 +180,23 @@ export default function CalendarView({ onNavigate }) {
   }
 
   function editEvent(ev) {
-    // Find all same-title-same-member events on consecutive dates to determine range
+    // Check if it's a single-row multi-day event (new pattern)
+    if (ev.end_date && ev.all_day && ev.end_date !== ev.event_date) {
+      setEditingEvent(ev)
+      setFormData({
+        title: ev.title, description: ev.description || '',
+        event_date: ev.event_date, event_time: ev.event_time || '',
+        event_end_date: ev.end_date,
+        event_type: ev.event_type, family_member: ev.family_member,
+        location: ev.location || '', all_day: ev.all_day,
+        duration_minutes: ev.duration_minutes,
+        recurring_pattern: ev.recurring_pattern || ''
+      })
+      setShowForm(true)
+      return
+    }
+    
+    // Legacy: Find all same-title-same-member events on consecutive dates to determine range
     const sameTitleAndMember = events.filter(e => 
       e.title === ev.title && e.family_member === ev.family_member
     ).sort((a, b) => a.event_date.localeCompare(b.event_date))
@@ -187,10 +224,29 @@ export default function CalendarView({ onNavigate }) {
 
   const todayStr = getLocalDateStr(new Date())
   const selectedStr = selectedDate || todayStr
-  const dayEvents = events.filter(e => e.event_date === selectedStr)
+  const dayEvents = events.filter(e => {
+    if (e.event_date === selectedStr) return true
+    if (e.end_date && e.all_day) {
+      return selectedStr >= e.event_date && selectedStr <= e.end_date
+    }
+    return false
+  })
 
-  // Detect multi-day events: group by title+family_member across consecutive dates
+  // Detect multi-day events: group by title+family_member across consecutive dates,
+  // OR single-row events with end_date set
   function isMultiDay(event) {
+    // Single-row multi-day (new pattern: end_date + all_day)
+    if (event.end_date && event.all_day && event.end_date !== event.event_date) {
+      return {
+        isPartOfMultiDay: true,
+        isStart: true,
+        isEnd: event.event_date === selectedStr ? false : event.end_date === selectedStr,
+        isMiddle: event.event_date !== selectedStr && event.end_date !== selectedStr,
+        endDate: event.end_date
+      }
+    }
+    
+    // Legacy pattern: consecutive rows with same title+member
     const sameTitleAndMember = events.filter(e => 
       e.title === event.title && e.family_member === event.family_member
     ).sort((a, b) => a.event_date.localeCompare(b.event_date))
@@ -246,7 +302,14 @@ export default function CalendarView({ onNavigate }) {
 
   function getEventsForDay(day) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return events.filter(e => e.event_date === dateStr)
+    // Direct match on event_date, OR multi-day event where date falls between event_date and end_date
+    return events.filter(e => {
+      if (e.event_date === dateStr) return true
+      if (e.end_date && e.all_day) {
+        return dateStr >= e.event_date && dateStr <= e.end_date
+      }
+      return false
+    })
   }
 
   function prevMonth() { setCurrentDate(new Date(year, month - 1, 1)) }
