@@ -161,6 +161,36 @@ export default function CalendarView({ onNavigate }) {
   const selectedStr = selectedDate || todayStr
   const dayEvents = events.filter(e => e.event_date === selectedStr)
 
+  // Detect multi-day events: group by title+family_member across consecutive dates
+  function isMultiDay(event) {
+    const sameTitleAndMember = events.filter(e => 
+      e.title === event.title && e.family_member === event.family_member
+    ).sort((a, b) => a.event_date.localeCompare(b.event_date))
+    
+    // Check if there are consecutive dates for this event
+    for (let i = 0; i < sameTitleAndMember.length; i++) {
+      if (sameTitleAndMember[i].id === event.id) {
+        const prev = sameTitleAndMember[i - 1]
+        const next = sameTitleAndMember[i + 1]
+        const thisDate = new Date(event.event_date + 'T12:00:00')
+        
+        let hasPrev = false, hasNext = false
+        if (prev) {
+          const prevDate = new Date(prev.event_date + 'T12:00:00')
+          const diff = (thisDate - prevDate) / 86400000
+          hasPrev = diff === 1
+        }
+        if (next) {
+          const nextDate = new Date(next.event_date + 'T12:00:00')
+          const diff = (nextDate - thisDate) / 86400000
+          hasNext = diff === 1
+        }
+        return { isPartOfMultiDay: hasPrev || hasNext, isStart: hasNext && !hasPrev, isEnd: hasPrev && !hasNext, isMiddle: hasPrev && hasNext }
+      }
+    }
+    return { isPartOfMultiDay: false }
+  }
+
   function formatTime(timeStr) {
     if (!timeStr) return ''
     const parts = timeStr.split(':')
@@ -268,14 +298,19 @@ export default function CalendarView({ onNavigate }) {
         {dayEvents.length === 0 ? (
           <div className="empty-state">No events for this day</div>
         ) : (
-          dayEvents.map(ev => (
-            <div key={ev.id} className={`event-item ${ev.family_member.toLowerCase()}`}>
+          dayEvents.map(ev => {
+            const md = isMultiDay(ev)
+            return (
+            <div key={ev.id} className={`event-item ${ev.family_member.toLowerCase()}`}
+              style={md.isPartOfMultiDay ? { borderLeftWidth: md.isMiddle ? '1px' : md.isEnd ? '3px' : '3px', borderLeftStyle: md.isMiddle ? 'dashed' : 'solid' } : {}}>
               <div className="event-item-content">
                 <div className="event-item-title" onClick={() => editEvent(ev)} style={{ cursor: 'pointer' }}>
-                  {ev.title}
+                  {md.isStart ? `🟢 ${ev.title}` : md.isEnd ? `🔴 ${ev.title}` : md.isMiddle ? `│ ${ev.title}` : ev.title}
                 </div>
                 <div className="event-item-meta">
-                  {ev.duration_minutes === 0 ? (
+                  {md.isPartOfMultiDay ? (
+                    <><Clock size={12} /> Multi-day event{md.isStart ? ' (starts)' : md.isEnd ? ' (ends)' : ' (continues)'}</>
+                  ) : ev.duration_minutes === 0 ? (
                     <><Clock size={12} /> All Day</>
                   ) : ev.event_time ? (
                     <><Clock size={12} /> {formatTime(ev.event_time)}{ev.duration_minutes > 0 ? ` – ${formatEndTime(ev.event_time, ev.duration_minutes)}` : ''}  </>
@@ -291,7 +326,7 @@ export default function CalendarView({ onNavigate }) {
                 <Trash2 size={14} />
               </button>
             </div>
-          ))
+          )})
         )}
       </div>
 
@@ -333,12 +368,10 @@ export default function CalendarView({ onNavigate }) {
                     <option value="240">4 hours</option>
                   </select>
                 </div>
-                {formData.duration_minutes === 0 && (
-                  <div className="form-group">
-                    <label>End Date</label>
-                    <input type="date" value={formData.event_end_date} onChange={e => setFormData({ ...formData, event_end_date: e.target.value })} />
-                  </div>
-                )}
+                <div className="form-group">
+                  <label>End Date (multi-day events)</label>
+                  <input type="date" value={formData.event_end_date} onChange={e => setFormData({ ...formData, event_end_date: e.target.value })} />
+                </div>
               </div>
               <div className="form-row">
                 <div className="form-group">
