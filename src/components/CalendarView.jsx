@@ -99,8 +99,28 @@ export default function CalendarView({ onNavigate }) {
       const basePayload = { ...formData, title: formData.title.trim() }
       
       if (editingEvent) {
-        await supabase.from('calendar_events').update(basePayload).eq('id', editingEvent.id)
-      } else if (basePayload.recurring_pattern) {
+        // Find and update/replace multi-day range if applicable
+        const sameTitleAndMember = events.filter(e => 
+          e.title === editingEvent.title && e.family_member === editingEvent.family_member
+        ).sort((a, b) => a.event_date.localeCompare(b.event_date))
+        
+        if (sameTitleAndMember.length > 1) {
+          // Multi-day edit: delete old range, re-insert with updated data
+          const oldIds = sameTitleAndMember.map(e => e.id)
+          for (const id of oldIds) {
+            await supabase.from('calendar_events').delete().eq('id', id)
+          }
+        } else {
+          // Single event edit: just update
+          await supabase.from('calendar_events').update(basePayload).eq('id', editingEvent.id)
+          resetForm()
+          setShowForm(false)
+          loadEvents()
+          return
+        }
+      }
+      
+      if (basePayload.recurring_pattern) {
         const dates = getNextOccurrences(basePayload.event_date, basePayload.recurring_pattern, recurrenceCount)
         const inserts = dates.map(d => ({ ...basePayload, event_date: d }))
         await supabase.from('calendar_events').insert(inserts)
@@ -139,10 +159,18 @@ export default function CalendarView({ onNavigate }) {
   }
 
   function editEvent(ev) {
+    // Find all same-title-same-member events on consecutive dates to determine range
+    const sameTitleAndMember = events.filter(e => 
+      e.title === ev.title && e.family_member === ev.family_member
+    ).sort((a, b) => a.event_date.localeCompare(b.event_date))
+    
+    const multiDayEnd = sameTitleAndMember.length > 1 ? sameTitleAndMember[sameTitleAndMember.length - 1].event_date : ''
+    
     setEditingEvent(ev)
     setFormData({
       title: ev.title, description: ev.description || '',
       event_date: ev.event_date, event_time: ev.event_time || '',
+      event_end_date: multiDayEnd,
       event_type: ev.event_type, family_member: ev.family_member,
       location: ev.location || '', all_day: ev.all_day,
       duration_minutes: ev.duration_minutes,
