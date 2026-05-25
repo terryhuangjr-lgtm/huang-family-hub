@@ -97,35 +97,22 @@ export default function CalendarView({ onNavigate }) {
     if (!formData.title.trim()) return
     try {
       const basePayload = { ...formData, title: formData.title.trim() }
+      // Map form field event_end_date to DB column end_date
+      if (formData.event_end_date) {
+        basePayload.end_date = formData.event_end_date
+      }
       // Strip form-only fields that aren't DB columns
       const { event_end_date, ...dbPayload } = basePayload
-      
+
       if (editingEvent) {
-        // If single-row multi-day event (new pattern), delete old row for re-insert
-        const isMultiDayRow = editingEvent.end_date && editingEvent.all_day && editingEvent.end_date !== editingEvent.event_date
-        if (isMultiDayRow) {
-          await supabase.from('calendar_events').delete().eq('id', editingEvent.id)
-        } else {
-          // Legacy: find related multi-day rows by title+member
-          const sameTitleAndMember = events.filter(e => 
-            e.title === editingEvent.title && e.family_member === editingEvent.family_member
-          ).sort((a, b) => a.event_date.localeCompare(b.event_date))
-          if (sameTitleAndMember.length > 1) {
-            const oldIds = sameTitleAndMember.map(e => e.id)
-            for (const id of oldIds) {
-              await supabase.from('calendar_events').delete().eq('id', id)
-            }
-          } else {
-            // Single event: just update in place
-            await supabase.from('calendar_events').update(dbPayload).eq('id', editingEvent.id)
-            resetForm()
-            setShowForm(false)
-            loadEvents()
-            return
-          }
-        }
+        // Single event (or first event clicked in a group): update in-place
+        await supabase.from('calendar_events').update(dbPayload).eq('id', editingEvent.id)
+        resetForm()
+        setShowForm(false)
+        loadEvents()
+        return
       }
-      
+
       if (dbPayload.recurring_pattern) {
         const dates = getNextOccurrences(dbPayload.event_date, dbPayload.recurring_pattern, recurrenceCount)
         const inserts = dates.map(d => ({ ...dbPayload, event_date: d }))
